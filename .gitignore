@@ -145,6 +145,16 @@ dmypy.json
 **/outputs/skyseg.onnx
 skyseg.onnx
 
+<<<<<<< Updated upstream
 # pixi environments
 .pixi
 *.egg-info
+=======
+# new added
+datasets/
+*.glb
+output/
+tmp/
+tmp\ copy/
+*.mp4
+>>>>>>> Stashed changes
