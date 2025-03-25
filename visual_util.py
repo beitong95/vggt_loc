@@ -13,6 +13,155 @@ import copy
 import cv2
 import os
 import requests
+from PIL import Image
+import io
+
+def load_glb_and_update_cameras(glb_path, predictions, predctions_test, scene_scale, previous_camera_position, previous_gt_camera_position):
+    """
+    Load a GLB file and update the camera poses.
+
+    Args:
+        glb_path (str): Path to the GLB file.
+        camera_poses (list): List of camera poses.
+
+    Returns:
+        trimesh.Scene: The loaded 3D scene.
+    """
+    camera_matrices = predctions_test["extrinsic"]
+    scene_3d = trimesh.load(glb_path, force="scene")
+    # Prepare 4x4 matrices for camera extrinsics
+    num_cameras = len(predctions_test["extrinsic"])
+    
+    extrinsics_matrices = np.zeros((num_cameras, 4, 4))
+    extrinsics_matrices[:, :3, :4] = camera_matrices
+    extrinsics_matrices[:, 3, 3] = 1
+    
+    align_matrix = np.zeros((num_cameras, 4, 4))
+    align_matrix[0, :3, :4] = predictions["extrinsic"][0]
+    align_matrix[0, 3, 3] = 1
+    # scene_3d = apply_scene_alignment(scene_3d, align_matrix)
+    scene_3d = reverse_scene_alignment(scene_3d, align_matrix)
+
+    # Add camera models to the scene
+    for i in range(num_cameras):
+        world_to_camera = extrinsics_matrices[i]
+        camera_to_world = np.linalg.inv(world_to_camera)
+        current_camera_position = integrate_camera_into_scene_with_trace(scene_3d, camera_to_world, (0,255,0), scene_scale, previous_camera_position)
+        previous_camera_position = current_camera_position
+    # integrate_camera_into_scene(scene_3d, camera_to_world, (0,255,0), scene_scale)
+    
+    if "gt_poses" in predctions_test.keys():
+        for i in range(num_cameras):
+            world_to_camera = predctions_test["gt_poses"][i]
+            camera_to_world = np.linalg.inv(world_to_camera)
+            
+            # integrate_camera_into_scene(scene_3d, camera_to_world, (255,0,0), scene_scale)
+            current_gt_camera_position = integrate_camera_into_scene_with_trace(scene_3d, camera_to_world, (255,0,0), scene_scale, previous_gt_camera_position)
+            previous_gt_camera_position = current_gt_camera_position
+
+    scene_3d = apply_scene_alignment(scene_3d, align_matrix)
+
+    return scene_3d, current_camera_position, current_gt_camera_position
+
+def load_glb_and_update_camera(glb_path, predictions, index, scene_scale, previous_camera_position, previous_gt_camera_position):
+    """
+    Load a GLB file and update the camera poses.
+
+    Args:
+        glb_path (str): Path to the GLB file.
+        camera_poses (list): List of camera poses.
+
+    Returns:
+        trimesh.Scene: The loaded 3D scene.
+    """
+    camera_matrices = predictions["extrinsic"][index]
+    scene_3d = trimesh.load(glb_path, force="scene")
+    # Prepare 4x4 matrices for camera extrinsics
+    num_cameras = 1
+    
+    extrinsics_matrices = np.zeros((num_cameras, 4, 4))
+    extrinsics_matrices[0, :3, :4] = camera_matrices
+    extrinsics_matrices[0, 3, 3] = 1
+    
+    
+    # if index == 0:
+    #     align_matrix = extrinsics_matrices
+    # else:
+    align_matrix = np.zeros((num_cameras, 4, 4))
+    align_matrix[0, :3, :4] = predictions["extrinsic"][0]
+    align_matrix[0, 3, 3] = 1
+    # scene_3d = apply_scene_alignment(scene_3d, align_matrix)
+    scene_3d = reverse_scene_alignment(scene_3d, align_matrix)
+
+    # Add camera models to the scene
+    i = index 
+    world_to_camera = extrinsics_matrices[0]
+    camera_to_world = np.linalg.inv(world_to_camera)
+
+    current_camera_position = integrate_camera_into_scene_with_trace(scene_3d, camera_to_world, (0,255,0), scene_scale, previous_camera_position)
+    # integrate_camera_into_scene(scene_3d, camera_to_world, (0,255,0), scene_scale)
+    
+    if "gt_poses" in predictions.keys():
+        world_to_camera = predictions["gt_poses"][i]
+        camera_to_world = np.linalg.inv(world_to_camera)
+        
+        # integrate_camera_into_scene(scene_3d, camera_to_world, (255,0,0), scene_scale)
+        current_gt_camera_position = integrate_camera_into_scene_with_trace(scene_3d, camera_to_world, (255,255,0), scene_scale, previous_gt_camera_position)
+
+
+    scene_3d = apply_scene_alignment(scene_3d, align_matrix)
+
+    return scene_3d, current_camera_position, current_gt_camera_position
+
+def load_glb_and_update_camera(glb_path, predictions, index, scene_scale, previous_camera_position, previous_gt_camera_position):
+    """
+    Load a GLB file and update the camera poses.
+
+    Args:
+        glb_path (str): Path to the GLB file.
+        camera_poses (list): List of camera poses.
+
+    Returns:
+        trimesh.Scene: The loaded 3D scene.
+    """
+    camera_matrices = predictions["extrinsic"][index]
+    scene_3d = trimesh.load(glb_path, force="scene")
+    # Prepare 4x4 matrices for camera extrinsics
+    num_cameras = 1
+    
+    extrinsics_matrices = np.zeros((num_cameras, 4, 4))
+    extrinsics_matrices[0, :3, :4] = camera_matrices
+    extrinsics_matrices[0, 3, 3] = 1
+    
+    
+    # if index == 0:
+    #     align_matrix = extrinsics_matrices
+    # else:
+    align_matrix = np.zeros((num_cameras, 4, 4))
+    align_matrix[0, :3, :4] = predictions["extrinsic"][0]
+    align_matrix[0, 3, 3] = 1
+    # scene_3d = apply_scene_alignment(scene_3d, align_matrix)
+    scene_3d = reverse_scene_alignment(scene_3d, align_matrix)
+
+    # Add camera models to the scene
+    i = index 
+    world_to_camera = extrinsics_matrices[0]
+    camera_to_world = np.linalg.inv(world_to_camera)
+
+    current_camera_position = integrate_camera_into_scene_with_trace(scene_3d, camera_to_world, (0,255,0), scene_scale, previous_camera_position)
+    # integrate_camera_into_scene(scene_3d, camera_to_world, (0,255,0), scene_scale)
+    
+    if "gt_poses" in predictions.keys():
+        world_to_camera = predictions["gt_poses"][i]
+        camera_to_world = np.linalg.inv(world_to_camera)
+        
+        # integrate_camera_into_scene(scene_3d, camera_to_world, (255,0,0), scene_scale)
+        current_gt_camera_position = integrate_camera_into_scene_with_trace(scene_3d, camera_to_world, (255,255,0), scene_scale, previous_gt_camera_position)
+
+
+    scene_3d = apply_scene_alignment(scene_3d, align_matrix)
+
+    return scene_3d, current_camera_position, current_gt_camera_position
 
 
 def predictions_to_glb(
@@ -208,11 +357,117 @@ def predictions_to_glb(
 
             integrate_camera_into_scene(scene_3d, camera_to_world, current_color, scene_scale)
 
+        if "gt_poses" in predictions.keys():
+            assert len(predictions["gt_poses"]) == num_cameras
+            for i in range(num_cameras):
+                world_to_camera = predictions["gt_poses"][i]
+                camera_to_world = np.linalg.inv(world_to_camera)
+
+
+                integrate_camera_into_scene(scene_3d, camera_to_world, (255,255,0), scene_scale)
+
     # Align scene to the observation of the first camera
     scene_3d = apply_scene_alignment(scene_3d, extrinsics_matrices)
 
     print("GLB Scene built")
-    return scene_3d
+    return scene_3d, scene_scale
+
+def add_line_between(scene, p1, p2, color=[255, 0, 0, 255], radius=0.01):
+    """
+    Add a cylinder between two points p1 and p2 in a trimesh Scene.
+    The bottom of the cylinder will be at p1 and the top at p2.
+    """
+    vector = p2 - p1
+    length = np.linalg.norm(vector)
+    if length == 0:
+        return
+
+    # Create cylinder, centered at origin, spanning from z=-length/2 to z=+length/2
+    cylinder = trimesh.creation.cylinder(radius=radius, height=length, sections=12)
+
+    # STEP 1: Move cylinder so that its bottom is at z=0 (instead of spanning [-length/2, +length/2])
+    # We'll translate it UP by length/2 along its local +Z axis.
+    T_center_to_bottom = trimesh.transformations.translation_matrix([0, 0, length / 2])
+    cylinder.apply_transform(T_center_to_bottom)
+
+    # STEP 2: Rotate cylinder so that its +Z axis aligns with the direction from p1 to p2
+    direction = vector / length
+    T_align = trimesh.geometry.align_vectors([0, 0, 1], direction)
+    cylinder.apply_transform(T_align)
+
+    # STEP 3: Finally, translate cylinder so that bottom is exactly at p1
+    T_move = trimesh.transformations.translation_matrix(p1)
+    cylinder.apply_transform(T_move)
+
+    # Assign face colors
+    cylinder.visual.face_colors = color
+
+    # Add cylinder to scene
+    scene.add_geometry(cylinder)
+
+
+def integrate_camera_into_scene_with_trace(
+    scene: trimesh.Scene,
+    transform: np.ndarray,
+    face_colors: tuple,
+    scene_scale: float,
+    last_camera_position: np.ndarray = None,
+) -> np.ndarray:
+    """
+    Integrates a fake camera mesh into the 3D scene.
+
+    Args:
+        scene (trimesh.Scene): The 3D scene to add the camera model.
+        transform (np.ndarray): Transformation matrix for camera positioning.
+        face_colors (tuple): Color of the camera face.
+        scene_scale (float): Scale of the scene.
+        last_camera_position (np.ndarray): The position of the previous camera (3D vector).
+        
+    Returns:
+        np.ndarray: The current camera position extracted from the transform.
+    """
+
+    cam_width = scene_scale * 0.006
+    cam_height = scene_scale * 0.012
+
+    # Create cone shape for camera
+    rot_45_degree = np.eye(4)
+    rot_45_degree[:3, :3] = Rotation.from_euler("z", 45, degrees=True).as_matrix()
+    rot_45_degree[2, 3] = -cam_height
+
+    opengl_transform = get_opengl_conversion_matrix()
+    complete_transform = transform @ opengl_transform @ rot_45_degree
+    camera_cone_shape = trimesh.creation.cone(cam_width, cam_height, sections=4)
+
+    # Generate mesh for the camera
+    slight_rotation = np.eye(4)
+    slight_rotation[:3, :3] = Rotation.from_euler("z", 2, degrees=True).as_matrix()
+
+    vertices_combined = np.concatenate(
+        [
+            camera_cone_shape.vertices,
+            0.95 * camera_cone_shape.vertices,
+            transform_points(slight_rotation, camera_cone_shape.vertices),
+        ]
+    )
+    vertices_transformed = transform_points(complete_transform, vertices_combined)
+
+    mesh_faces = compute_camera_faces(camera_cone_shape)
+
+    # Add the camera mesh to the scene
+    camera_mesh = trimesh.Trimesh(vertices=vertices_transformed, faces=mesh_faces)
+    camera_mesh.visual.face_colors[:, :3] = face_colors
+    scene.add_geometry(camera_mesh)
+
+    # Get current camera position (camera origin in world coordinates)
+    current_camera_position = transform[:3, 3]
+
+    # If last camera position is provided, draw a line
+    if last_camera_position is not None:
+        add_line_between(scene, last_camera_position, current_camera_position, face_colors, scene_scale * 0.0005)
+
+
+    return current_camera_position
 
 
 def integrate_camera_into_scene(
@@ -231,13 +486,15 @@ def integrate_camera_into_scene(
         scene_scale (float): Scale of the scene.
     """
 
-    cam_width = scene_scale * 0.05
-    cam_height = scene_scale * 0.1
+    cam_width = scene_scale * 0.006
+    cam_height = scene_scale * 0.012
 
     # Create cone shape for camera
     rot_45_degree = np.eye(4)
     rot_45_degree[:3, :3] = Rotation.from_euler("z", 45, degrees=True).as_matrix()
     rot_45_degree[2, 3] = -cam_height
+
+
 
     opengl_transform = get_opengl_conversion_matrix()
     # Combine transformations
@@ -264,6 +521,38 @@ def integrate_camera_into_scene(
     camera_mesh.visual.face_colors[:, :3] = face_colors
     scene.add_geometry(camera_mesh)
 
+
+def reverse_scene_alignment(scene_3d: trimesh.Scene, extrinsics_matrices: np.ndarray) -> trimesh.Scene:
+    """
+    Reverts the alignment transformation previously applied to the 3D scene.
+
+    Args:
+        scene_3d (trimesh.Scene): The aligned 3D scene.
+        extrinsics_matrices (np.ndarray): Original camera extrinsic matrices used for alignment.
+
+    Returns:
+        trimesh.Scene: The scene transformed back to its original coordinates.
+    """
+    # Get OpenGL conversion matrix
+    opengl_conversion_matrix = get_opengl_conversion_matrix()
+
+    # Inverse of the 180-degree rotation around the y-axis
+    align_rotation = np.eye(4)
+    align_rotation[:3, :3] = Rotation.from_euler("y", 180, degrees=True).as_matrix()
+    align_rotation_inv = np.linalg.inv(align_rotation)
+
+    # Inverse of OpenGL conversion
+    opengl_conversion_inv = np.linalg.inv(opengl_conversion_matrix)
+
+    # Original camera-to-world transformation
+    camera_to_world = np.linalg.inv(extrinsics_matrices[0])
+    world_to_camera = np.linalg.inv(camera_to_world)
+
+    # Reverse transformation: align_rotation⁻¹ @ opengl_conversion⁻¹ @ extrinsics
+    reverse_transform = align_rotation_inv @ opengl_conversion_inv @ world_to_camera
+    scene_3d.apply_transform(reverse_transform)
+
+    return scene_3d
 
 def apply_scene_alignment(scene_3d: trimesh.Scene, extrinsics_matrices: np.ndarray) -> trimesh.Scene:
     """
